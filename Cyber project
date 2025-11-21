@@ -1,1 +1,143 @@
+/* xor_cipher.c
+   Simple XOR-based encrypt/decrypt program.
+   - Encrypts plaintext using a string key (XOR, repeating key).
+   - Outputs ciphertext as hex (easy to save/share).
+   - Decrypts hex ciphertext using the same key to recover plaintext.
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_INPUT 10000
+#define MAX_KEY 512
+
+void chomp(char *s) {
+    size_t n = strlen(s);
+    if (n > 0 && s[n-1] == '\n') s[n-1] = '\0';
+}
+
+char *bytes_to_hex(const unsigned char *bytes, size_t len) {
+    char *hex = malloc(len * 2 + 1);
+    if (!hex) return NULL;
+    for (size_t i = 0; i < len; ++i) {
+        sprintf(hex + i*2, "%02X", bytes[i]);
+    }
+    hex[len*2] = '\0';
+    return hex;
+}
+
+ssize_t hex_to_bytes(const char *hex, unsigned char **out) {
+    size_t hlen = strlen(hex);
+    if (hlen % 2 != 0) return -1;
+    size_t bytelen = hlen / 2;
+    unsigned char *buf = malloc(bytelen);
+    if (!buf) return -1;
+    for (size_t i = 0; i < bytelen; ++i) {
+        char byteStr[3] = { hex[i*2], hex[i*2 + 1], '\0' };
+        if (!isxdigit(byteStr[0]) || !isxdigit(byteStr[1])) { free(buf); return -1; }
+        buf[i] = (unsigned char) strtoul(byteStr, NULL, 16);
+    }
+    *out = buf;
+    return (ssize_t)bytelen;
+}
+
+void xor_process(unsigned char *data, size_t dataLen, const unsigned char *key, size_t keyLen) {
+    for (size_t i = 0; i < dataLen; ++i) {
+        data[i] ^= key[i % keyLen];
+    }
+}
+
+int main(void) {
+    char choice[8];
+    char input[MAX_INPUT];
+    char key[MAX_KEY];
+
+    printf("Simple XOR cipher (same key locks and opens)\n");
+    printf("Choose: (1) Encrypt   (2) Decrypt\n");
+    printf("Enter choice (1/2): ");
+    if (!fgets(choice, sizeof choice, stdin)) return 1;
+    chomp(choice);
+
+    if (strcmp(choice, "1") == 0) {
+
+
+        printf("\nEnter plaintext (max %d chars). End with Enter:\n", MAX_INPUT - 2);
+        if (!fgets(input, sizeof input, stdin)) return 1;
+        chomp(input);
+
+        printf("Enter key (any text, max %d chars):\n", MAX_KEY - 2);
+        if (!fgets(key, sizeof key, stdin)) return 1;
+        chomp(key);
+        if (strlen(key) == 0) {
+            fprintf(stderr, "Key must not be empty.\n");
+            return 1;
+        }
+
+        size_t dataLen = strlen(input);
+        size_t keyLen = strlen(key);
+        unsigned char *buf = malloc(dataLen);
+        if (!buf) { fprintf(stderr, "Memory error\n"); return 1; }
+        memcpy(buf, input, dataLen);
+
+        xor_process(buf, dataLen, (unsigned char*)key, keyLen);
+
+        char *hex = bytes_to_hex(buf, dataLen);
+        if (!hex) { free(buf); fprintf(stderr, "Memory error\n"); return 1; }
+
+        printf("\nCiphertext (hex):\n%s\n", hex);
+        printf("\nSave this hex and use the same key to decrypt.\n");
+
+        free(hex);
+        free(buf);
+    } else if (strcmp(choice, "2") == 0) {
+
+
+        printf("\nEnter ciphertext (HEX):\n");
+        if (!fgets(input, sizeof input, stdin)) return 1;
+        chomp(input);
+
+
+        char compact[MAX_INPUT];
+        size_t j = 0;
+        for (size_t i = 0; i < strlen(input) && j < sizeof(compact)-1; ++i) {
+            if (!isspace((unsigned char)input[i])) compact[j++] = input[i];
+        }
+        compact[j] = '\0';
+
+        unsigned char *bytes = NULL;
+        ssize_t bylen = hex_to_bytes(compact, &bytes);
+        if (bylen < 0) {
+            fprintf(stderr, "Invalid hex input.\n");
+            return 1;
+        }
+
+        printf("Enter key (same key used to encrypt):\n");
+        if (!fgets(key, sizeof key, stdin)) { free(bytes); return 1; }
+        chomp(key);
+        if (strlen(key) == 0) {
+            fprintf(stderr, "Key must not be empty.\n");
+            free(bytes);
+            return 1;
+        }
+
+        xor_process(bytes, (size_t)bylen, (unsigned char*)key, strlen(key));
+
+
+        char *plain = malloc(bylen + 1);
+        if (!plain) { free(bytes); fprintf(stderr, "Memory error\n"); return 1; }
+        memcpy(plain, bytes, bylen);
+        plain[bylen] = '\0';
+
+        printf("\nRecovered plaintext:\n%s\n", plain);
+
+        free(bytes);
+        free(plain);
+    } else {
+        printf("Invalid choice. Exiting.\n");
+    }
+
+    return 0;
+}
 
